@@ -95,6 +95,7 @@
     <h2>4. Compare candidates</h2>
     <div id="list"></div>
     <button id="pdf">📄 Download PDF summary</button>
+    <button class="secondary" id="clearAll">🗑️ New session (clear all)</button>
   </section>
 </main>
 
@@ -203,6 +204,15 @@
     document.getElementById("report-date").textContent =
       "Report date: " + new Date().toLocaleDateString("en-GB");
     window.print();
+  });
+
+  // New session: delete all saved candidates
+  document.getElementById("clearAll").addEventListener("click", () => {
+    if (saved.length === 0) { alert("There are no saved candidates."); return; }
+    if (!confirm("Delete all " + saved.length + " saved candidates and start a new session?")) return;
+    saved = [];
+    store(); showList();
+    document.getElementById("reset").click();
   });
 
   document.getElementById("reset").addEventListener("click", () => {
