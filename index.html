@@ -42,6 +42,7 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eceef4; }
   td.del { cursor: pointer; color: var(--red); text-align: right; }
+  #list { overflow-x: auto; margin-bottom: 8px; }
   .empty { color: var(--muted); }
   footer { text-align: center; color: var(--muted); font-size: .9rem; padding: 20px; }
   #report-date { display: none; }
@@ -51,7 +52,10 @@
     body { background: #fff; }
     header { background: none; color: var(--text); padding: 0 0 10px; }
     .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
-    button, #compare { display: none !important; }
+    button, .form-part, td.del, th.del { display: none !important; }
+    header p:not(#report-date) { display: none; }
+    header h1::after { content: " – Summary"; }
+    main { max-width: none; }
     #report-date { display: block; color: var(--muted); margin-top: 6px; }
     .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
@@ -66,24 +70,23 @@
 </header>
 
 <main>
-  <section class="card">
+  <section class="card form-part">
     <h2>1. Candidate</h2>
     <label for="name">Candidate name</label>
     <input type="text" id="name" placeholder="e.g. Anna Virtanen">
   </section>
 
-  <section class="card">
+  <section class="card form-part">
     <h2>2. Rate skills (1 = weak, 5 = excellent)</h2>
     <div id="criteria"></div>
   </section>
 
-  <section class="card result">
+  <section class="card result form-part">
     <h2>3. Result</h2>
     <div class="score" id="score">0%</div>
     <span class="badge" id="badge">—</span>
     <div>
       <button id="save">💾 Save candidate</button>
-      <button class="secondary" id="pdf">📄 Download PDF report</button>
       <button class="secondary" id="reset">↺ Reset</button>
     </div>
   </section>
@@ -91,6 +94,7 @@
   <section class="card" id="compare">
     <h2>4. Compare candidates</h2>
     <div id="list"></div>
+    <button id="pdf">📄 Download PDF summary</button>
   </section>
 </main>
 
@@ -159,12 +163,13 @@
     }
     const sorted = [...saved].sort((a, b) => b.score - a.score);
     list.innerHTML = `<table>
-      <tr><th>#</th><th>Name</th><th>Score</th><th>Verdict</th><th></th></tr>
+      <tr><th>#</th><th>Name</th>${criteria.map(c => `<th>${c.name}</th>`).join("")}<th>Score</th><th>Verdict</th><th class="del"></th></tr>
       ${sorted.map((c, i) => `
         <tr>
           <td>${i + 1}</td>
           <td>${c.name}</td>
-          <td>${c.score}%</td>
+          ${criteria.map(k => `<td>${c.ratings ? c.ratings[k.id] : "–"}</td>`).join("")}
+          <td><b>${c.score}%</b></td>
           <td>${verdict(c.score).text}</td>
           <td class="del" data-id="${c.id}" title="Delete">✖</td>
         </tr>`).join("")}
@@ -182,15 +187,17 @@
     const nameInput = document.getElementById("name");
     const name = nameInput.value.trim().replace(/[<>]/g, "");
     if (!name) { alert("Please enter a candidate name."); return; }
-    saved.push({ id: Date.now(), name, score: calcScore() });
+    const ratings = {};
+    criteria.forEach(c => ratings[c.id] = Number(document.getElementById(c.id).value));
+    saved.push({ id: Date.now(), name, score: calcScore(), ratings });
     store(); showList();
     document.getElementById("reset").click();
   });
 
   // PDF report: opens the print window, where you pick "Save as PDF"
   document.getElementById("pdf").addEventListener("click", () => {
-    if (!document.getElementById("name").value.trim()) {
-      alert("Please enter a candidate name first.");
+    if (saved.length === 0) {
+      alert("Save at least one candidate first.");
       return;
     }
     document.getElementById("report-date").textContent =
