@@ -44,6 +44,10 @@
   .sub h4 { margin: 8px 0 4px; color: var(--muted); font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }
   .q-pick { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; margin: 6px 0; cursor: pointer; }
   .q-pick input { margin-top: 4px; accent-color: var(--accent); }
+  .q-del { margin-left: auto; background: none; color: var(--red); padding: 0 6px; margin-top: 0; font-size: .95rem; }
+  .add-q { display: flex; gap: 8px; margin-top: 6px; }
+  .add-q input { flex: 1; padding: 8px; font-size: .95rem; }
+  .add-q button { margin: 0; padding: 8px 14px; font-size: .95rem; }
 
   /* Rating */
   .trait-block { border-top: 1px solid var(--line); padding: 12px 0; }
@@ -99,7 +103,7 @@
 <main>
   <section class="card form-part">
     <h2>0. Interview questions</h2>
-    <p class="hint">Tick the template questions you want to ask. Traits with no questions use a simple slider.</p>
+    <p class="hint">Tick the template questions you want to ask, or add your own. Traits with no questions use a simple slider.</p>
     <div id="bank"></div>
   </section>
 
@@ -210,10 +214,16 @@
   let picked  = load("scorecard-picked", {});   // { questionKey: true }
   let answers = {};                              // { questionKey: 1..5 } for the current candidate
   let saved   = load("scorecard", []);
+  let custom  = load("scorecard-custom", {});  // { traitId: [ {id, text} ] }
 
   const qKey = (traitId, sub, i) => traitId + "|" + sub + "|" + i;
   const pickedFor = traitId => Object.keys(picked).filter(k => picked[k] && k.startsWith(traitId + "|"));
-  const questionText = key => { const [t, s, i] = key.split("|"); return bank[t][s][i]; };
+  const questionText = key => {
+    const [t, s, i] = key.split("|");
+    if (s === "custom") return (custom[t] || []).find(q => String(q.id) === i)?.text ?? "";
+    return bank[t][s][i];
+  };
+  const escapeHtml = str => str.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
 
   // ---------- 0. Question bank ----------
   function showBank() {
@@ -232,6 +242,20 @@
               </label>`;
             }).join("")}
           </div>`).join("")}
+        <div class="sub">
+          <h4>My questions</h4>
+          ${(custom[c.id] || []).map(q => {
+            const k = qKey(c.id, "custom", q.id);
+            return `<label class="q-pick">
+              <input type="checkbox" data-key="${k}" ${picked[k] ? "checked" : ""}> ${escapeHtml(q.text)}
+              <button type="button" class="q-del" data-trait="${c.id}" data-id="${q.id}" title="Delete question">✖</button>
+            </label>`;
+          }).join("")}
+          <div class="add-q">
+            <input type="text" id="new-${c.id}" placeholder="Write your own ${c.name.toLowerCase()} question…">
+            <button type="button" data-add="${c.id}">+ Add</button>
+          </div>
+        </div>
       </details>`).join("");
   }
 
@@ -241,6 +265,35 @@
     if (e.target.checked) picked[k] = true; else delete picked[k];
     save("scorecard-picked", picked);
     showBank(); showCriteria(); update();
+  });
+
+  // Add / delete custom questions
+  function addCustom(traitId) {
+    const input = document.getElementById("new-" + traitId);
+    const text = input.value.trim();
+    if (!text) return;
+    const q = { id: Date.now(), text };
+    (custom[traitId] = custom[traitId] || []).push(q);
+    picked[qKey(traitId, "custom", q.id)] = true;   // auto-tick new question
+    save("scorecard-custom", custom); save("scorecard-picked", picked);
+    showBank(); showCriteria(); update();
+  }
+
+  document.getElementById("bank").addEventListener("click", e => {
+    if (e.target.dataset.add) { addCustom(e.target.dataset.add); return; }
+    if (e.target.classList.contains("q-del")) {
+      e.preventDefault();
+      const t = e.target.dataset.trait, id = e.target.dataset.id;
+      custom[t] = (custom[t] || []).filter(q => String(q.id) !== id);
+      const k = qKey(t, "custom", id);
+      delete picked[k]; delete answers[k];
+      save("scorecard-custom", custom); save("scorecard-picked", picked);
+      showBank(); showCriteria(); update();
+    }
+  });
+
+  document.getElementById("bank").addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.target.id?.startsWith("new-")) addCustom(e.target.id.slice(4));
   });
 
   // ---------- 2. Rating area ----------
@@ -259,7 +312,7 @@
       return `<div class="trait-block">${head}
         ${qs.map(k => `
           <div class="q-rate">
-            <p>${questionText(k)}</p>
+            <p>${escapeHtml(questionText(k))}</p>
             <div class="stars" data-key="${k}">
               ${[1,2,3,4,5].map(n => `<button type="button" data-n="${n}" class="${(answers[k] ?? 3) === n ? "on" : ""}">${n}</button>`).join("")}
             </div>
