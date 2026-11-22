@@ -44,6 +44,17 @@
   td.del { cursor: pointer; color: var(--red); text-align: right; }
   .empty { color: var(--muted); }
   footer { text-align: center; color: var(--muted); font-size: .9rem; padding: 20px; }
+  #report-date { display: none; }
+
+  /* PDF / print layout: only the current candidate's report */
+  @media print {
+    body { background: #fff; }
+    header { background: none; color: var(--text); padding: 0 0 10px; }
+    .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+    button, #compare { display: none !important; }
+    #report-date { display: block; color: var(--muted); margin-top: 6px; }
+    .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
 </style>
 </head>
 <body>
@@ -51,6 +62,7 @@
 <header>
   <h1>🧑‍💼 Candidate Scorecard</h1>
   <p>Rate candidates fairly and compare them side by side</p>
+  <p id="report-date"></p>
 </header>
 
 <main>
@@ -71,11 +83,12 @@
     <span class="badge" id="badge">—</span>
     <div>
       <button id="save">💾 Save candidate</button>
+      <button class="secondary" id="pdf">📄 Download PDF report</button>
       <button class="secondary" id="reset">↺ Reset</button>
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" id="compare">
     <h2>4. Compare candidates</h2>
     <div id="list"></div>
   </section>
@@ -172,6 +185,17 @@
     saved.push({ id: Date.now(), name, score: calcScore() });
     store(); showList();
     document.getElementById("reset").click();
+  });
+
+  // PDF report: opens the print window, where you pick "Save as PDF"
+  document.getElementById("pdf").addEventListener("click", () => {
+    if (!document.getElementById("name").value.trim()) {
+      alert("Please enter a candidate name first.");
+      return;
+    }
+    document.getElementById("report-date").textContent =
+      "Report date: " + new Date().toLocaleDateString("en-GB");
+    window.print();
   });
 
   document.getElementById("reset").addEventListener("click", () => {
