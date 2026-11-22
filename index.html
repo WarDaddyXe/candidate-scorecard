@@ -7,7 +7,8 @@
 <style>
   :root {
     --bg: #f4f6fb; --card: #ffffff; --text: #1d2433; --muted: #6b7385;
-    --accent: #4f46e5; --green: #16a34a; --amber: #d97706; --red: #dc2626;
+    --accent: #4f46e5; --accent-soft: #eef0ff; --line: #eceef4;
+    --green: #16a34a; --amber: #d97706; --red: #dc2626;
   }
   * { box-sizing: border-box; }
   body {
@@ -23,14 +24,41 @@
     box-shadow: 0 2px 10px rgba(0,0,0,.06); margin-bottom: 20px;
   }
   h2 { margin-top: 0; font-size: 1.2rem; }
+  .hint { color: var(--muted); margin-top: -6px; }
   label { font-weight: 600; display: block; margin-bottom: 6px; }
   input[type=text] {
     width: 100%; padding: 10px; border: 1px solid #d5d9e3; border-radius: 8px; font-size: 1rem;
   }
-  .row { display: grid; grid-template-columns: 1fr 70px; gap: 12px; align-items: center; margin: 14px 0; }
-  .row small { color: var(--muted); font-weight: 400; }
+
+  /* Question bank */
+  details.trait { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; }
+  details.trait > summary {
+    cursor: pointer; padding: 12px 14px; font-weight: 700; list-style: none;
+    display: flex; justify-content: space-between;
+  }
+  details.trait > summary::-webkit-details-marker { display: none; }
+  details.trait > summary::before { content: "▸ "; }
+  details.trait[open] > summary::before { content: "▾ "; }
+  details.trait > summary span { color: var(--accent); font-weight: 600; font-size: .9rem; }
+  .sub { padding: 0 14px 10px; }
+  .sub h4 { margin: 8px 0 4px; color: var(--muted); font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }
+  .q-pick { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; margin: 6px 0; cursor: pointer; }
+  .q-pick input { margin-top: 4px; accent-color: var(--accent); }
+
+  /* Rating */
+  .trait-block { border-top: 1px solid var(--line); padding: 12px 0; }
+  .trait-block:first-child { border-top: 0; }
+  .trait-head { display: flex; justify-content: space-between; align-items: center; }
+  .trait-head small { color: var(--muted); font-weight: 400; }
+  .val { font-weight: 800; font-size: 1.1rem; color: var(--accent); min-width: 40px; text-align: right; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
-  .val { text-align: center; font-weight: 700; font-size: 1.1rem; }
+  .q-rate { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin: 8px 0 0 10px; }
+  .q-rate p { margin: 0; font-size: .95rem; }
+  .stars button {
+    margin: 0 2px 0 0; padding: 4px 9px; font-size: .9rem; background: #e5e7f0; color: var(--text);
+  }
+  .stars button.on { background: var(--accent); color: #fff; }
+
   .result { text-align: center; }
   .score { font-size: 3rem; font-weight: 800; margin: 4px 0; }
   .badge { display: inline-block; padding: 6px 14px; border-radius: 999px; color: #fff; font-weight: 700; }
@@ -40,14 +68,14 @@
   }
   button.secondary { background: #e5e7f0; color: var(--text); }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eceef4; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
   td.del { cursor: pointer; color: var(--red); text-align: right; }
   #list { overflow-x: auto; margin-bottom: 8px; }
   .empty { color: var(--muted); }
   footer { text-align: center; color: var(--muted); font-size: .9rem; padding: 20px; }
   #report-date { display: none; }
 
-  /* PDF / print layout: only the current candidate's report */
+  /* PDF / print layout: summary of all saved candidates */
   @media print {
     body { background: #fff; }
     header { background: none; color: var(--text); padding: 0 0 10px; }
@@ -57,7 +85,6 @@
     header h1::after { content: " – Summary"; }
     main { max-width: none; }
     #report-date { display: block; color: var(--muted); margin-top: 6px; }
-    .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
@@ -71,13 +98,19 @@
 
 <main>
   <section class="card form-part">
+    <h2>0. Interview questions</h2>
+    <p class="hint">Tick the template questions you want to ask. Traits with no questions use a simple slider.</p>
+    <div id="bank"></div>
+  </section>
+
+  <section class="card form-part">
     <h2>1. Candidate</h2>
     <label for="name">Candidate name</label>
     <input type="text" id="name" placeholder="e.g. Anna Virtanen">
   </section>
 
   <section class="card form-part">
-    <h2>2. Rate skills (1 = weak, 5 = excellent)</h2>
+    <h2>2. Rate the candidate (1 = weak, 5 = excellent)</h2>
     <div id="criteria"></div>
   </section>
 
@@ -102,7 +135,7 @@
 <footer>Made by Chathuranga Fernando · HR + IT project</footer>
 
 <script>
-  // Criteria and their weights (weights add up to 100)
+  // ---------- Traits (weights add up to 100) ----------
   const criteria = [
     { id: "comm",    name: "Communication",      weight: 25 },
     { id: "tech",    name: "Technical skills",   weight: 25 },
@@ -111,22 +144,152 @@
     { id: "culture", name: "Team / culture fit", weight: 15 }
   ];
 
-  const box = document.getElementById("criteria");
-  criteria.forEach(c => {
-    box.innerHTML += `
-      <div class="row">
-        <div>
-          <label for="${c.id}">${c.name} <small>(weight ${c.weight}%)</small></label>
-          <input type="range" id="${c.id}" min="1" max="5" value="3">
-        </div>
-        <div class="val" id="${c.id}-val">3</div>
-      </div>`;
+  // ---------- Template question bank: trait -> sub-category -> questions ----------
+  const bank = {
+    comm: {
+      "Listening": [
+        "Tell me about a time you misunderstood an instruction. What did you learn?",
+        "How do you make sure you understood what a colleague needs?"
+      ],
+      "Presenting": [
+        "Describe a time you explained something complex to a non-expert.",
+        "How do you prepare for an important presentation?"
+      ],
+      "Writing": [
+        "How do you write an email that gets a quick, clear answer?"
+      ]
+    },
+    tech: {
+      "Job knowledge": [
+        "Which tools or systems have you used most in your recent role?",
+        "Walk me through how you would do [a key task of this job]."
+      ],
+      "Learning new skills": [
+        "Tell me about a new tool you had to learn fast. How did you do it?"
+      ]
+    },
+    exp: {
+      "Relevant experience": [
+        "Which of your past roles is closest to this job, and why?",
+        "What is the biggest result you achieved in your last role?"
+      ],
+      "Responsibility": [
+        "Tell me about a project you owned from start to finish."
+      ]
+    },
+    problem: {
+      "Analysis": [
+        "Describe a difficult problem you solved. What steps did you take?",
+        "How do you decide what to do first when everything is urgent?"
+      ],
+      "Creativity": [
+        "Tell me about a time you found a new or better way to do something."
+      ]
+    },
+    culture: {
+      "Teamwork": [
+        "Tell me about a conflict in a team and how you handled it.",
+        "What role do you usually take in a team?"
+      ],
+      "Values & motivation": [
+        "What kind of workplace brings out your best work?",
+        "Why do you want to work with us?"
+      ]
+    }
+  };
+
+  // ---------- Safe browser storage ----------
+  function load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+  }
+
+  // ---------- State ----------
+  let picked  = load("scorecard-picked", {});   // { questionKey: true }
+  let answers = {};                              // { questionKey: 1..5 } for the current candidate
+  let saved   = load("scorecard", []);
+
+  const qKey = (traitId, sub, i) => traitId + "|" + sub + "|" + i;
+  const pickedFor = traitId => Object.keys(picked).filter(k => picked[k] && k.startsWith(traitId + "|"));
+  const questionText = key => { const [t, s, i] = key.split("|"); return bank[t][s][i]; };
+
+  // ---------- 0. Question bank ----------
+  function showBank() {
+    const box = document.getElementById("bank");
+    const openNow = [...box.querySelectorAll("details[open]")].map(d => d.dataset.trait);
+    box.innerHTML = criteria.map(c => `
+      <details class="trait" data-trait="${c.id}" ${openNow.includes(c.id) ? "open" : ""}>
+        <summary>${c.name} <span>${pickedFor(c.id).length} selected</span></summary>
+        ${Object.entries(bank[c.id]).map(([sub, qs]) => `
+          <div class="sub">
+            <h4>${sub}</h4>
+            ${qs.map((q, i) => {
+              const k = qKey(c.id, sub, i);
+              return `<label class="q-pick">
+                <input type="checkbox" data-key="${k}" ${picked[k] ? "checked" : ""}> ${q}
+              </label>`;
+            }).join("")}
+          </div>`).join("")}
+      </details>`).join("");
+  }
+
+  document.getElementById("bank").addEventListener("change", e => {
+    const k = e.target.dataset.key;
+    if (!k) return;
+    if (e.target.checked) picked[k] = true; else delete picked[k];
+    save("scorecard-picked", picked);
+    showBank(); showCriteria(); update();
   });
+
+  // ---------- 2. Rating area ----------
+  function showCriteria() {
+    const box = document.getElementById("criteria");
+    box.innerHTML = criteria.map(c => {
+      const qs = pickedFor(c.id);
+      const head = `<div class="trait-head">
+          <label for="${c.id}">${c.name} <small>(weight ${c.weight}%)</small></label>
+          <div class="val" id="${c.id}-val"></div>
+        </div>`;
+      if (qs.length === 0) {
+        return `<div class="trait-block">${head}
+          <input type="range" id="${c.id}" min="1" max="5" value="3"></div>`;
+      }
+      return `<div class="trait-block">${head}
+        ${qs.map(k => `
+          <div class="q-rate">
+            <p>${questionText(k)}</p>
+            <div class="stars" data-key="${k}">
+              ${[1,2,3,4,5].map(n => `<button type="button" data-n="${n}" class="${(answers[k] ?? 3) === n ? "on" : ""}">${n}</button>`).join("")}
+            </div>
+          </div>`).join("")}
+      </div>`;
+    }).join("");
+  }
+
+  document.getElementById("criteria").addEventListener("input", update);
+  document.getElementById("criteria").addEventListener("click", e => {
+    const n = Number(e.target.dataset.n);
+    const k = e.target.parentElement?.dataset.key;
+    if (!n || !k) return;
+    answers[k] = n;
+    e.target.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", Number(b.dataset.n) === n));
+    update();
+  });
+
+  // Trait value = slider, or the average of its question ratings
+  function traitValue(c) {
+    const qs = pickedFor(c.id);
+    if (qs.length === 0) return Number(document.getElementById(c.id).value);
+    const avg = qs.reduce((sum, k) => sum + (answers[k] ?? 3), 0) / qs.length;
+    return Math.round(avg * 10) / 10;
+  }
 
   function calcScore() {
     let total = 0;
     criteria.forEach(c => {
-      const v = Number(document.getElementById(c.id).value);
+      const v = traitValue(c);
       document.getElementById(c.id + "-val").textContent = v;
       total += (v / 5) * c.weight;
     });
@@ -148,14 +311,7 @@
     b.style.background = v.color;
   }
 
-  // Saved candidates (kept in this browser only)
-  let saved = [];
-  try { saved = JSON.parse(localStorage.getItem("scorecard") || "[]"); } catch (e) {}
-
-  function store() {
-    try { localStorage.setItem("scorecard", JSON.stringify(saved)); } catch (e) {}
-  }
-
+  // ---------- 4. Saved candidates ----------
   function showList() {
     const list = document.getElementById("list");
     if (saved.length === 0) {
@@ -180,27 +336,23 @@
   document.getElementById("list").addEventListener("click", e => {
     if (e.target.classList.contains("del")) {
       saved = saved.filter(c => c.id !== Number(e.target.dataset.id));
-      store(); showList();
+      save("scorecard", saved); showList();
     }
   });
 
   document.getElementById("save").addEventListener("click", () => {
-    const nameInput = document.getElementById("name");
-    const name = nameInput.value.trim().replace(/[<>]/g, "");
+    const name = document.getElementById("name").value.trim().replace(/[<>]/g, "");
     if (!name) { alert("Please enter a candidate name."); return; }
     const ratings = {};
-    criteria.forEach(c => ratings[c.id] = Number(document.getElementById(c.id).value));
+    criteria.forEach(c => ratings[c.id] = traitValue(c));
     saved.push({ id: Date.now(), name, score: calcScore(), ratings });
-    store(); showList();
+    save("scorecard", saved); showList();
     document.getElementById("reset").click();
   });
 
-  // PDF report: opens the print window, where you pick "Save as PDF"
+  // PDF summary: opens the print window, where you pick "Save as PDF"
   document.getElementById("pdf").addEventListener("click", () => {
-    if (saved.length === 0) {
-      alert("Save at least one candidate first.");
-      return;
-    }
+    if (saved.length === 0) { alert("Save at least one candidate first."); return; }
     document.getElementById("report-date").textContent =
       "Report date: " + new Date().toLocaleDateString("en-GB");
     window.print();
@@ -211,17 +363,20 @@
     if (saved.length === 0) { alert("There are no saved candidates."); return; }
     if (!confirm("Delete all " + saved.length + " saved candidates and start a new session?")) return;
     saved = [];
-    store(); showList();
+    save("scorecard", saved); showList();
     document.getElementById("reset").click();
   });
 
+  // Reset: clear the current candidate's form
   document.getElementById("reset").addEventListener("click", () => {
     document.getElementById("name").value = "";
-    criteria.forEach(c => document.getElementById(c.id).value = 3);
-    update();
+    answers = {};
+    showCriteria(); update();
   });
 
-  criteria.forEach(c => document.getElementById(c.id).addEventListener("input", update));
+  // ---------- Start ----------
+  showBank();
+  showCriteria();
   update();
   showList();
 </script>
