@@ -229,6 +229,9 @@
   function showBank() {
     const box = document.getElementById("bank");
     const openNow = [...box.querySelectorAll("details[open]")].map(d => d.dataset.trait);
+    // keep any half-typed questions so a redraw does not wipe them
+    const drafts = {};
+    box.querySelectorAll(".add-q input").forEach(i => drafts[i.id] = i.value);
     box.innerHTML = criteria.map(c => `
       <details class="trait" data-trait="${c.id}" ${openNow.includes(c.id) ? "open" : ""}>
         <summary>${c.name} <span>${pickedFor(c.id).length} selected</span></summary>
@@ -257,6 +260,7 @@
           </div>
         </div>
       </details>`).join("");
+    Object.entries(drafts).forEach(([id, v]) => { const i = document.getElementById(id); if (i) i.value = v; });
   }
 
   document.getElementById("bank").addEventListener("change", e => {
@@ -273,6 +277,7 @@
     const text = input.value.trim();
     if (!text) return;
     const q = { id: Date.now(), text };
+    input.value = "";
     (custom[traitId] = custom[traitId] || []).push(q);
     picked[qKey(traitId, "custom", q.id)] = true;   // auto-tick new question
     save("scorecard-custom", custom); save("scorecard-picked", picked);
